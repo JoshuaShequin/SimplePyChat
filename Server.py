@@ -25,11 +25,11 @@ import datetime
 
 class Server:
 
-    def __init__(self):
+    def __init__(self, port, IP):
 
         self.on = True
         self.IP = '127.0.0.1'  # local IP for now
-        self.PORT = 5005  # random port to use
+        self.PORT = 9999  # random port to use
         self.BUFFER_SIZE = 1024
         self.messages = []  # stored [[message, timestamp], ...]
         self.connections = []  # hold all current connections for broadcasting
@@ -52,27 +52,34 @@ class Server:
     def client_connection_thread(self, conn):
         # where all of the client data is handled
         while self.on:
-            data = conn.recv(self.BUFFER_SIZE)
+            try:
+                data = conn.recv(self.BUFFER_SIZE)
+            except ConnectionResetError:  # handling when a client disconnects abruptly
+                self.disconnect_conn(conn)
+                break
             if not data:
                 break
             else:
                 print("Received Data: ", data)
-                remList = []  # using this list to remove connections after loop finishes
-                counter = 0
                 for connection in self.connections:
                     if connection != conn:
                         try:
                             connection.send(data)
-                        except ConnectionResetError:
-                            remList.append(counter)
-                    counter += 1
+                        except ConnectionResetError:  # client no longer connected, so we don't try to send them a msg
+                            pass  # was going to actually delete any connections that disconnected here, but I will let
+                            # threads remove their own connections
 
-                remList.sort(reverse=True)  # have to sort otherwise we delete the, intended index - deleted items
-                for rem in remList:
-                    del self.connections[rem]
+    def disconnect_conn(self, conn):
+        indexed = self.connections.index(conn)
+        print("Disconnected: ", conn)
+        del self.connections[indexed]
 
 
-s = Server()
+
+IP = input("Desired IP: ")
+PORT = input("Desired Port: ")
+
+s = Server(PORT, IP)
 t = threading.Thread(target=s.find_connections)
 t.start()
 
