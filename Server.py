@@ -28,8 +28,8 @@ class Server:
     def __init__(self, port, IP):
 
         self.on = True
-        self.IP = '127.0.0.1'  # local IP for now
-        self.PORT = 9999  # random port to use
+        self.IP = IP  # local IP for now
+        self.PORT = port  # random port to use
         self.BUFFER_SIZE = 1024
         self.messages = []  # stored [[message, timestamp], ...]
         self.connections = []  # hold all current connections for broadcasting
@@ -75,11 +75,10 @@ class Server:
         del self.connections[indexed]
 
 
-
 IP = input("Desired IP: ")
 PORT = input("Desired Port: ")
 
-s = Server(PORT, IP)
+s = Server(int(PORT), IP)
 t = threading.Thread(target=s.find_connections)
 t.start()
 
