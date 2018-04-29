@@ -27,6 +27,8 @@ class Server:
 
     def __init__(self, port, IP):
 
+        self.version = [1, 1]
+
         self.on = True
         self.IP = IP  # local IP for now
         self.PORT = port  # random port to use
@@ -49,11 +51,40 @@ class Server:
 
         # conn.close()
 
+    def verify_client(self, message):
+        verify_message = bytes()
+        verify_message += b'\x01CHAT'
+        verify_message += bytes(self.version[0])
+        verify_message += bytes(self.version[1])
+        if message[0:7] != verify_message:
+            print(message[0:7])
+            return False
+        return True
+
     def client_connection_thread(self, conn):
         # where all of the client data is handled
+        connected_time = datetime.datetime.now()
+        first_data_received = False
         while self.on:
             try:
                 data = conn.recv(self.BUFFER_SIZE)
+                if datetime.datetime.now() - connected_time > datetime.timedelta(seconds=1):
+                    conn.send(b'\x01Client took too long to validate.')
+                    self.disconnect_conn(conn)
+                    break
+                if not first_data_received:
+                    if len(data) < 6:
+                        conn.send(b'\x01Wrong version or client for this connection!')
+                        self.disconnect_conn(conn)
+                        break
+                    if self.verify_client(data):
+                        first_data_received = True
+                        print("Client Verified", conn)
+                        continue
+                    else:
+                        conn.send(b'\x01Wrong version or client for this connection!')
+                        self.disconnect_conn(conn)
+                        break
             except ConnectionResetError:  # handling when a client disconnects abruptly
                 self.disconnect_conn(conn)
                 break
@@ -72,6 +103,7 @@ class Server:
     def disconnect_conn(self, conn):
         indexed = self.connections.index(conn)
         print("Disconnected: ", conn)
+        self.connections[indexed].close()
         del self.connections[indexed]
 
 
