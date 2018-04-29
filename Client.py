@@ -14,7 +14,6 @@ class Client:
         self.BUFFER_SIZE = 1024
         self.username = username
 
-
         self.socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
         self.socket.connect((self.TCP_IP, self.TCP_PORT))
 
@@ -28,7 +27,10 @@ class Client:
             self.send_message(send_data)
 
     def receive_messages(self):
-        verify_message = bytes()
+        verify_message = bytes()  # essentially the message we need to see to verify client version etc.
+        # will be:
+        # Byte 0: Administration Identifier of 0x01
+        # Bytes 1-4: CHAT as a verification message sort of, unique identifier
         verify_message += b'\x01CHAT'
         verify_message += bytes(self.version[0])
         verify_message += bytes(self.version[1])

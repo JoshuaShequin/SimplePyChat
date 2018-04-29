@@ -52,7 +52,12 @@ class Server:
         # conn.close()
 
     def verify_client(self, message):
-        verify_message = bytes()
+        verify_message = bytes()  # essentially the message we need to see to verify client version etc.
+        # will be:
+        # Byte 0: Administration Identifier of 0x01
+        # Bytes 1-4: CHAT as a verification message sort of, unique identifier
+        # Bytes 5-6: Major, Minor Version
+        # Bytes 6-: Should be username when I make that handler
         verify_message += b'\x01CHAT'
         verify_message += bytes(self.version[0])
         verify_message += bytes(self.version[1])
@@ -69,19 +74,26 @@ class Server:
             try:
                 data = conn.recv(self.BUFFER_SIZE)
                 if datetime.datetime.now() - connected_time > datetime.timedelta(seconds=1):
+                    # This doesn't actually work because nothing happens until data is received here
+                    # it does kind of work, but not as intended
+                    # If a client doesn't send a message within a second it is not an accepted client
                     conn.send(b'\x01Client took too long to validate.')
                     self.disconnect_conn(conn)
                     break
                 if not first_data_received:
-                    if len(data) < 6:
+                    # we need to get the first message of a verification message
+                    if len(data) < 8:
+                        # if the message is less than 8 bytes something is up
                         conn.send(b'\x01Wrong version or client for this connection!')
                         self.disconnect_conn(conn)
                         break
                     if self.verify_client(data):
+                        # if the message was a correct verification message we are all good!
                         first_data_received = True
                         print("Client Verified", conn)
                         continue
                     else:
+                        # verification message was incorrect
                         conn.send(b'\x01Wrong version or client for this connection!')
                         self.disconnect_conn(conn)
                         break
@@ -101,9 +113,15 @@ class Server:
                             # threads remove their own connections
 
     def disconnect_conn(self, conn):
-        indexed = self.connections.index(conn)
+        # we disconnect the client and remove it from our list of clients here
+        indexed = self.connections.index(conn)  # find the client in our list of clients (planned to be changed)
         print("Disconnected: ", conn)
-        self.connections[indexed].close()
+        try:
+            conn.send(b"Goodbye.")
+            conn.close()
+        except ConnectionResetError:
+            # The connection was already closed so we cannot send a goodbye message and close it ourselves
+            pass
         del self.connections[indexed]
 
 
