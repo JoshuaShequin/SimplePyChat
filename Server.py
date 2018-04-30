@@ -51,19 +51,28 @@ class Server:
 
         # conn.close()
 
-    def verify_client(self, message):
+    def verify_client(self, conn, message):
         verify_message = bytes()  # essentially the message we need to see to verify client version etc.
         # will be:
         # Byte 0: Administration Identifier of 0x01
         # Bytes 1-4: CHAT as a verification message sort of, unique identifier
         # Bytes 5-6: Major, Minor Version
-        # Bytes 6-: Should be username when I make that handler
+        # Byte 7: Length of User name
+        # Byte 8-n: Username
+
         verify_message += b'\x01CHAT'
         verify_message += bytes(self.version[0])
         verify_message += bytes(self.version[1])
         if message[0:7] != verify_message:
             print(message[0:7])
-            return False
+            conn.send(b'\x01Wrong version or client for this connection!')
+        else:
+            user_name_length = int(message[7])
+            try:
+                user_name = message[8:8+user_name_length]
+            except IndexError:
+                conn.send(b'\x01Wrong version or client for this connection!')
+
         return True
 
     def client_connection_thread(self, conn):
