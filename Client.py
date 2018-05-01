@@ -3,6 +3,10 @@ import threading
 import datetime
 import ctypes
 
+# TODO
+# 1. More protocol work, handling admin messages etc.
+# 2. handle when a connection closes you monkey
+
 
 class Client:
 
