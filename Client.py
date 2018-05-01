@@ -1,13 +1,14 @@
 import socket
 import threading
 import datetime
+import ctypes
 
 
 class Client:
 
     def __init__(self, port, ip, username):
 
-        self.version = [1, 1]
+        self.version = [ctypes.c_uint8(1), ctypes.c_uint8(1)]
 
         self.TCP_IP = ip
         self.TCP_PORT = port
@@ -34,6 +35,7 @@ class Client:
         verify_message += b'\x01CHAT'
         verify_message += bytes(self.version[0])
         verify_message += bytes(self.version[1])
+        verify_message += bytes(ctypes.c_uint8(len(self.username)))
         verify_message += bytes(self.username, 'utf-8')
         self.socket.send(verify_message)
         while True:
@@ -42,7 +44,7 @@ class Client:
                 self.open = False
                 print("Connection Closed")
                 break
-            print("<<< " + str(data, 'utf-8'))
+            print(str(data, 'utf-8'))
 
     def send_message(self, message):
         self.socket.send(bytes(message, 'utf-8'))
@@ -51,6 +53,9 @@ class Client:
 IP = input("Desired IP Connection: ")
 PORT = input("Desired Port Connection: ")
 USERNAME = input("Desired Username: ")
+
+while len(USERNAME) > 16:
+    print("Username cannot be longer than 16 characters")
 
 client = Client(int(PORT), IP, USERNAME)
 

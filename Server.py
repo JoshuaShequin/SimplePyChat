@@ -21,20 +21,57 @@ Flow:
 import socket  # used to create the actual socket connection needed for TCP
 import threading
 import datetime
+import ctypes
+
+
+class UserConnection:
+
+    def __init__(self, conn):
+
+        self.connection = conn
+
+        self.verified = False
+        self.user_name = None
+
+    def disconnect(self):
+        # disconnects the actual connection with the server
+        try:
+            self.connection.send(b"Goodbye.")
+            self.connection.close()
+        except ConnectionResetError:
+            # The connection was already closed so we cannot send a goodbye message and close it ourselves
+            pass
+
+    def send_message(self, message):
+        # takes a bytes type message and sends to client
+        if self.verified or message[0] == 0x01:  # only send data to a client if it has been verified, unless it admin
+            self.connection.send(message)
+
+    def receive_message(self, buffer):
+
+        return self.connection.recv(buffer)
+
+    def verification_update(self, user_name, welcome_message):
+
+        self.verified = True
+        self.user_name = user_name
+        self.send_message(welcome_message)
 
 
 class Server:
 
     def __init__(self, port, IP):
 
-        self.version = [1, 1]
+        self.version = [ctypes.c_uint8(1), ctypes.c_uint8(1)]
+
+        self.welcome_message = b'Welcome. Type your message and send it across the world!'
 
         self.on = True
         self.IP = IP  # local IP for now
         self.PORT = port  # random port to use
         self.BUFFER_SIZE = 1024
         self.messages = []  # stored [[message, timestamp], ...]
-        self.connections = []  # hold all current connections for broadcasting
+        self.connections = []  # hold all current connections for broadcasting etc.
 
         self.socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
         self.socket.bind((self.IP, self.PORT))
@@ -44,14 +81,13 @@ class Server:
         # loop that is threaded to look for incoming connections
         while self.on:
             conn, addr = self.socket.accept()
-            self.connections.append(conn)
             print('Connection Address: ', addr)
-            client_thread = threading.Thread(target=self.client_connection_thread, args=(conn, ))
-            client_thread.start()  # starting client handling thread
+            client_thread = threading.Thread(target=self.verify_client, args=(conn, ))
+            client_thread.start()  # starting client handling thread, actually starts in the verify function though
 
         # conn.close()
 
-    def verify_client(self, conn, message):
+    def verify_client(self, conn):
         verify_message = bytes()  # essentially the message we need to see to verify client version etc.
         # will be:
         # Byte 0: Administration Identifier of 0x01
@@ -63,75 +99,57 @@ class Server:
         verify_message += b'\x01CHAT'
         verify_message += bytes(self.version[0])
         verify_message += bytes(self.version[1])
-        if message[0:7] != verify_message:
-            print(message[0:7])
-            conn.send(b'\x01Wrong version or client for this connection!')
-        else:
-            user_name_length = int(message[7])
-            try:
-                user_name = message[8:8+user_name_length]
-            except IndexError:
-                conn.send(b'\x01Wrong version or client for this connection!')
+        u_conn = UserConnection(conn)
+        data = u_conn.receive_message(24)  # maximum initial message size of 24 bytes
 
+        if data[0:7] != verify_message:
+            print(data[0:7])
+            conn.send(b'\x01Wrong version or client for this connection!')
+            self.disconnect_conn(conn)
+        else:
+            user_name_length = int(data[7])
+            if len(data) - 8 != user_name_length:  # if the length doesn't match the data left in the message
+                print(len(data) - 8, user_name_length)
+                conn.send(b'\x01Wrong version or client for this connection!')
+                self.disconnect_conn(u_conn)
+            else:
+                user_name = data[8:]
+                u_conn.verification_update(user_name, self.welcome_message)
+                self.connections.append(u_conn)
+                self.client_connection_thread(u_conn)
         return True
 
-    def client_connection_thread(self, conn):
+    def client_connection_thread(self, u_conn):
         # where all of the client data is handled
         connected_time = datetime.datetime.now()
         first_data_received = False
         while self.on:
             try:
-                data = conn.recv(self.BUFFER_SIZE)
-                if datetime.datetime.now() - connected_time > datetime.timedelta(seconds=1):
-                    # This doesn't actually work because nothing happens until data is received here
-                    # it does kind of work, but not as intended
-                    # If a client doesn't send a message within a second it is not an accepted client
-                    conn.send(b'\x01Client took too long to validate.')
-                    self.disconnect_conn(conn)
-                    break
-                if not first_data_received:
-                    # we need to get the first message of a verification message
-                    if len(data) < 8:
-                        # if the message is less than 8 bytes something is up
-                        conn.send(b'\x01Wrong version or client for this connection!')
-                        self.disconnect_conn(conn)
-                        break
-                    if self.verify_client(data):
-                        # if the message was a correct verification message we are all good!
-                        first_data_received = True
-                        print("Client Verified", conn)
-                        continue
-                    else:
-                        # verification message was incorrect
-                        conn.send(b'\x01Wrong version or client for this connection!')
-                        self.disconnect_conn(conn)
-                        break
+                data = u_conn.receive_message(self.BUFFER_SIZE)
             except ConnectionResetError:  # handling when a client disconnects abruptly
-                self.disconnect_conn(conn)
+                self.disconnect_conn(u_conn)
                 break
             if not data:
                 break
             else:
                 print("Received Data: ", data)
+                out_data = u_conn.user_name + bytes(": ", 'utf-8') + data
                 for connection in self.connections:
-                    if connection != conn:
+                    if connection != u_conn:  # make sure we aren't sending the client what it sends us
                         try:
-                            connection.send(data)
+                            connection.send_message(out_data)
                         except ConnectionResetError:  # client no longer connected, so we don't try to send them a msg
                             pass  # was going to actually delete any connections that disconnected here, but I will let
                             # threads remove their own connections
 
-    def disconnect_conn(self, conn):
+    def disconnect_conn(self, u_conn):
         # we disconnect the client and remove it from our list of clients here
-        indexed = self.connections.index(conn)  # find the client in our list of clients (planned to be changed)
-        print("Disconnected: ", conn)
-        try:
-            conn.send(b"Goodbye.")
-            conn.close()
-        except ConnectionResetError:
-            # The connection was already closed so we cannot send a goodbye message and close it ourselves
-            pass
-        del self.connections[indexed]
+        print("Disconnected: ", u_conn.connection)
+        if u_conn.verified:
+            index_pos = self.connections.index(u_conn)
+            del self.connections[index_pos]
+
+
 
 
 IP = input("Desired IP: ")
