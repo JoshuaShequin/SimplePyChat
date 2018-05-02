@@ -1,0 +1,3 @@
+01 - Version Mis-match
+02 - Byte difference with name in verification message
+03 - Name Taken

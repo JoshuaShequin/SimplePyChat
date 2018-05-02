@@ -1,0 +1,30 @@
+Quick description for protocol used by Chat server/client. Main focus is for minimal byte used for server/client needs, for less wasted bytes etc. 
+
+After TCP connection created, first packet is expected to be from client as a verification message.
+
+Every packet here after will use the first byte as a message type identifier. This allows the application to quickly disseminate the use of the packet, and is virtually required.
+
+0x01 - Administration message type. Holds error codes, verification messages, etc. Pretty much anything for the server to talk to the client application (not the users) or vice versa.
+0x02 - Holds actual chat messages. Either to the Server or from it. It will hold exactly what will get printed on to the clients screen if from the server, or will hold the intended message from the client to be sent to the server.
+
+Client Verification Message - 
+Focus is to create verification that the packet does belong to this application, that the versions match between the server and the client, and to get the requested username from the client.
+
+Byte 0 - 0x01 (administration message)
+Bytes 1-4 - in ASCII "CHAT" just used to verify that it is belonging to this application
+Byte 5 - Major version
+Byte 6 - Minor version
+Byte 7 - Length of Username(immediately following)
+Byte 8-n(max 16 bytes) - Username. Use the previous field 
+
+Chat Message - 
+A message either from the client or from the server directly intended to be sent to users. From server has an additional field including who it was from
+
+Byte 0 - 0x02 (actual chat message)
+(SERVER ONLY)
+Byte 1 - Length of Username
+Bytes 2-n(Max length of 16 bytes) - Username. Length is determined by byte before
+(BOTH SERVER AND CLIENT, IF SERVER THIS TAKES PLACE AFTER PREVIOUS FIELD)
+Bytes 1-2 - Length of chat message
+Bytes 3-n (max 65536) - Chat message
+
