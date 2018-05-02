@@ -77,6 +77,8 @@ class Server:
         self.socket.bind((self.IP, self.PORT))
         self.socket.listen(10)
 
+        self.names = []
+
     def find_connections(self):
         # loop that is threaded to look for incoming connections
         while self.on:
@@ -114,9 +116,14 @@ class Server:
                 self.disconnect_conn(u_conn)
             else:
                 user_name = data[8:]
-                u_conn.verification_update(user_name, self.welcome_message)
-                self.connections.append(u_conn)
-                self.client_connection_thread(u_conn)
+                if user_name in self.names:
+                    conn.send(b'\x01Name is already taken, please try another.')
+                    self.disconnect_conn(u_conn)
+                else:
+                    self.names.append(user_name)
+                    u_conn.verification_update(user_name, self.welcome_message)
+                    self.connections.append(u_conn)
+                    self.client_connection_thread(u_conn)
         return True
 
     def client_connection_thread(self, u_conn):
