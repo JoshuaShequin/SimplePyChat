@@ -1,6 +1,5 @@
 import socket
 import threading
-import datetime
 import ctypes
 
 # TODO
